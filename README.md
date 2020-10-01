@@ -1,4 +1,5 @@
 # ActionAI 🤸
+
 [![Python 3.x](https://img.shields.io/badge/python-3.x-blue.svg)](https://www.python.org/downloads/release/python-370/)
 ![stars](https://img.shields.io/github/stars/smellslikeml/ActionAI)
 ![forks](https://img.shields.io/github/forks/smellslikeml/ActionAI)
@@ -102,7 +103,7 @@ $ python train_sequential.py
 ## Deployment
 We've provided a sample inference script, ```inference.py```, that will read input from a webcam, mp4, or rstp stream, run inference on each frame, and print inference results. 
 
-If you are running on a Jetson Nano, the ```iva.py``` script will perform multi-person tracking and activity recognition like the demo gif above *Getting Started*. Simply run:
+If you are running on a Jetson Nano, you can try running the ```iva.py``` script, which will perform multi-person tracking and activity recognition like the demo gif above *Getting Started*. Make sure you have followed the Jetson Nano installation instructions above and simply run:
 ```bash
 $ python iva.py 0
 
@@ -110,7 +111,7 @@ $ python iva.py 0
 
 $ python iva.py /path/to/file.mp4
 ```
-If specified, this script will write a labeled video as ```out.mp4```.
+If specified, this script will write a labeled video as ```out.mp4```. This demo uses a sample model called ```lstm_spin_squat.h5``` to classify spinning vs. squatting. Change the model and motion dictionary under the ```RUNSECONDARY``` flag to run your own classifier. 
 
 ### Teachable Machine
 <p align="center">

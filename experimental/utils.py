@@ -1,8 +1,15 @@
+import cv2
 import string
 import random
 import numpy as np
+import trt_pose.coco
 from operator import itemgetter
 from sklearn.utils.linear_assignment_ import linear_assignment
+
+import person
+import config as cfg
+
+topology = trt_pose.coco.coco_category_to_topology(cfg.human_pose)
 
 def id_gen(size=6, chars=string.ascii_uppercase + string.digits):
     '''
@@ -59,7 +66,6 @@ def tracker_match(trackers, detections, iou_thrd = 0.3):
     # Produces matches
     # Solve the maximizing the sum of IOU assignment problem using the
     # Hungarian algorithm (also known as Munkres algorithm)
-
     matched_idx = linear_assignment(-IOU_mat)
 
     unmatched_trackers, unmatched_detections = [], []
@@ -91,3 +97,87 @@ def tracker_match(trackers, detections, iou_thrd = 0.3):
 
     return matches, np.array(unmatched_detections), np.array(unmatched_trackers)
 
+def source_capture(source):
+    source = int(source) if source.isdigit() else source
+    cap = cv2.VideoCapture(source)
+
+    fourcc_cap = cv2.VideoWriter_fourcc(*'MJPG')
+    cap.set(cv2.CAP_PROP_FOURCC, fourcc_cap)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, cfg.w)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cfg.h)
+    return cap
+
+class img_obj(object):
+    def __init__(self, offset=50):
+        self.offset = 50
+        self.fontScale = 1
+        self.thickness = 2
+        self.box_color = (195, 195, 89)
+        self.text_color = (151, 187, 106)
+        self.centroid_color = (223, 183, 190)
+
+
+    def annotate(self, tracker, image, boxes):
+        '''
+        Used to return image with
+        person instances designated 
+        by the bounding box and a 
+        marker at the centroid.
+        Annotated with tracker id
+        and activity label
+        '''
+        for row in topology:
+            try:
+                a_idx, b_idx = row[2:]
+                a_part, b_part = cfg.body_dict[int(a_idx.data.cpu().numpy())], cfg.body_dict[int(b_idx.data.cpu().numpy())]
+                a_coord, b_coord = tracker.pose_dict[a_part], tracker.pose_dict[b_part]
+                cv2.line(image, a_coord, b_coord, tracker.skeleton_color, 2)
+            except KeyError:
+                pass
+
+        if boxes:
+            try:
+                x1, y1, x2, y2 = tracker.bbox
+                image = cv2.rectangle(image, (x1 - self.offset, y1 - self.offset), 
+                                             (x2 + self.offset, y2 + self.offset), 
+                                             self.box_color, 2) 
+                image = cv2.drawMarker(image, tracker.centroid, self.centroid_color, 0, 30, self.thickness) 
+                cv2.putText(image, tracker.id, (x1 - self.offset, y1 - self.offset), \
+                                   cv2.FONT_HERSHEY_SIMPLEX, self.fontScale, self.text_color, self.thickness) 
+                cv2.putText(image, str(tracker.activity), (x1 - self.offset, y1 - self.offest), \
+                                   cv2.FONT_HERSHEY_SIMPLEX, self.fontScale, self.text_color, self.thickness) 
+            except:
+                pass
+
+        return image
+
+    def get_crop(self, bbox, image):
+        '''
+        Helper for sampling image crops
+        '''
+        return image[x1:x2, y1:y2, :]
+
+
+
+def update_trackers(trackers, bboxes):
+    track_boxes = [tracker.bbox for tracker in trackers]
+    matched, unmatched_trackers, unmatched_detections = tracker_match(track_boxes, [b[0] for b in bboxes])
+
+    for idx, jdx in matched:
+        trackers[idx].set_bbox(bboxes[jdx][0])
+        trackers[idx].set_pose(bboxes[jdx][1])
+
+    for idx in unmatched_detections:
+        try:
+            trackers[idx].count += 1
+            if trackers[idx].count > trackers[idx].expiration:
+                trackers.pop(idx)
+        except:
+            pass
+
+    for idx in unmatched_trackers:
+        p = person.PersonTracker()
+        p.set_bbox(bboxes[idx][0])
+        p.set_pose(bboxes[idx][1])
+        trackers.append(p)
+    return trackers
